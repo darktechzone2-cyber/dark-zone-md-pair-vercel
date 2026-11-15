@@ -164,6 +164,15 @@ export function createPairHandler(deps = {}) {
       return;
     }
 
+    // The old working pair.js (KataBump era) waits a fixed 3s after socket
+    // creation before asking for a code; this build asked ~1ms after the qr.
+    // The qr proves the server answered, but the session may need a moment
+    // to settle before companion_hello is accepted — the server silently
+    // drops a too-early hello (40s of nothing, socket alive). Settle 2.5s
+    // after the qr, mirroring the old 3s-from-creation timing.
+    console.log('qr received, settling 2500ms before requesting code');
+    await new Promise((r) => setTimeout(r, 2500));
+
     let code;
     try {
       console.log('requesting code, wsOpen=', session.sock.ws?.isOpen ?? 'unknown');
