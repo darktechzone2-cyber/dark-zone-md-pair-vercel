@@ -55,6 +55,7 @@ export function createStatusHandler(deps = {}) {
     if (id && result && result.id === id) {
       out.status = result.status;
       if (result.status === 'code' && result.code) out.code = result.code;
+      if (result.status === 'code' && result.qr) out.qr = result.qr;
       if (result.status === 'done' && result.sessionId) out.sessionId = result.sessionId;
       if (result.status === 'error' && result.error) out.error = result.error;
     }

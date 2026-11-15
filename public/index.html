@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dark Zone MD — Pairing</title>
 <link rel="icon" href="https://cdn.jsdelivr.net/gh/darktechzone2-cyber/dark-zone-md-pair@main/dtz-official-logo.jpg">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#0a0c10; --card:#12151d; --line:#232836; --text:#e8eaf2; --muted:#9aa3b8;
@@ -48,6 +49,8 @@
   .foot a{color:var(--accent2);text-decoration:none}
   .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:transparent;
     border-radius:50%;vertical-align:-2px;margin-right:7px;animation:sp 0.8s linear infinite}
+  .qrbox{margin-top:18px;text-align:center}
+  #qrImg{display:inline-block;padding:10px;background:#fff;border-radius:12px;line-height:0}
   @keyframes sp{to{transform:rotate(360deg)}}
 </style>
 </head>
@@ -76,6 +79,11 @@
         <li>Tap <b>“Link with phone number instead”</b></li>
         <li>Enter the code above</li>
       </ol>
+      <div id="qrBox" class="hidden qrbox">
+        <p class="hint" style="margin-bottom:8px">Code not working? Scan this QR instead:</p>
+        <div id="qrImg"></div>
+        <p class="hint">WhatsApp → Settings → Linked Devices → Link a Device → scan.</p>
+      </div>
       <p class="status" id="waitStatus"><span class="spin"></span>Waiting for you to enter the code in WhatsApp…</p>
       <p class="hint" style="text-align:center">Be ready in WhatsApp before you request the code — you have about 40 seconds.</p>
     </div>
@@ -103,6 +111,21 @@
 <script>
   let pollTimer = null;
   const $ = (id) => document.getElementById(id);
+  let currentQr = null;
+  let qrObj = null;
+  // The QR arrives with the code (same server handshake) and is refreshed
+  // by polling. Rendered locally in the browser — the QR data never leaves
+  // this page, so if the CDN library fails to load the code path still works.
+  function showQr(qr) {
+    if (!qr || qr === currentQr) return;
+    if (typeof QRCode === 'undefined') return;
+    currentQr = qr;
+    $('qrBox').classList.remove('hidden');
+    try {
+      if (qrObj) qrObj.makeCode(qr);
+      else qrObj = new QRCode($('qrImg'), { text: qr, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });
+    } catch { /* QR render failed — code path still works */ }
+  }
 
   // The server replies with the code immediately, then keeps the WhatsApp
   // socket waiting in the background while you type the code into WhatsApp.
@@ -128,6 +151,7 @@
       $('formBox').classList.add('hidden');
       $('codeBox').classList.remove('hidden');
       if (data.code) $('codeText').textContent = data.code;
+      if (data.qr) showQr(data.qr);
       pollStatus(data.id, 0);
     } catch (e) {
       $('formError').textContent = e.message;
@@ -147,6 +171,7 @@
       const res = await fetch('/api/status?id=' + encodeURIComponent(id));
       const data = await res.json();
       if (data.code) $('codeText').textContent = data.code;
+      if (data.qr) showQr(data.qr);
       if (data.status === 'done' && data.sessionId) {
         $('codeBox').classList.add('hidden');
         $('doneBox').classList.remove('hidden');

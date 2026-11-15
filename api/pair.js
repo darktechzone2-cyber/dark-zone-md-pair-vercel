@@ -124,6 +124,11 @@ export function createPairHandler(deps = {}) {
     } catch { /* no usable lock: proceed */ }
 
     const attemptId = crypto.randomBytes(9).toString('hex');
+    // The QR arrives with the handshake (same server answer as the code
+    // gate). Capture it so the page can offer QR scanning as a fallback
+    // when the pairing-code notification never arrives.
+    let latestQr = null;
+    const onQr = (qr) => { latestQr = qr; };
 
     // 3. Open a socket. A failed attempt leaves unregistered creds behind;
     // WhatsApp kills a re-used dead session with 401 loggedOut, and the
@@ -131,7 +136,7 @@ export function createPairHandler(deps = {}) {
     // same way. Start from blank creds when a stale session is stored.
     let session;
     try {
-      session = await openSession({ kv, makeSocket, getVersion, logger });
+      session = await openSession({ kv, makeSocket, getVersion, logger, onQr });
     } catch {
       sendJson(res, 502, { ok: false, error: 'Could not start a WhatsApp connection. Try again.' });
       return;
@@ -140,7 +145,7 @@ export function createPairHandler(deps = {}) {
       session.disconnect();
       await clearAuth(kv).catch(() => {});
       try {
-        session = await openSession({ kv, makeSocket, getVersion, logger });
+        session = await openSession({ kv, makeSocket, getVersion, logger, onQr });
       } catch {
         sendJson(res, 502, { ok: false, error: 'Could not start a WhatsApp connection. Try again.' });
         return;
@@ -173,7 +178,9 @@ export function createPairHandler(deps = {}) {
     const now = Date.now();
     await kv.set(PAIR_CODE_KEY, JSON.stringify({ code, number: digits, id: attemptId, at: now })).catch(() => {});
     await kv.set(LOCK_KEY, JSON.stringify({ id: attemptId, number: digits, at: now })).catch(() => {});
-    await kv.set(RESULT_KEY, JSON.stringify({ id: attemptId, number: digits, status: 'code', code, at: now })).catch(() => {});
+    const resultRec = { id: attemptId, number: digits, status: 'code', code, at: now };
+    if (latestQr) resultRec.qr = latestQr;
+    await kv.set(RESULT_KEY, JSON.stringify(resultRec)).catch(() => {});
     console.log('pair code issued for', maskNumber(digits));
 
     // Reply NOW; keep the socket waiting in the background with waitUntil
@@ -223,7 +230,9 @@ export function createPairHandler(deps = {}) {
     })();
     try { waitUntilFn(settlePair); } catch { /* not on Vercel: promise still runs */ }
 
-    sendJson(res, 200, { ok: true, code, id: attemptId });
+    const reply = { ok: true, code, id: attemptId };
+    if (latestQr) reply.qr = latestQr;
+    sendJson(res, 200, reply);
   };
 }
 
