@@ -161,7 +161,9 @@ export function createPairHandler(deps = {}) {
 
     let code;
     try {
+      console.log('requesting code, wsOpen=', session.sock.ws?.isOpen ?? 'unknown');
       code = await session.sock.requestPairingCode(digits);
+      console.log('requestPairingCode returned, wsOpen=', session.sock.ws?.isOpen ?? 'unknown');
     } catch {
       await session.persist().catch(() => {});
       session.disconnect();
@@ -180,6 +182,7 @@ export function createPairHandler(deps = {}) {
       let sessionId = null;
       try {
         const result = await session.waitForOpen(waitMs);
+        console.log('pair settle result:', result);
         if (result === 'open' || result === 'restarted') {
           await session.persist().catch(() => {});
           // Encode exactly what the Express original encoded: the raw
@@ -201,6 +204,7 @@ export function createPairHandler(deps = {}) {
           console.log('pair done for', maskNumber(digits));
         }
       } catch (e) {
+        console.log('pair settle failed:', e.message);
         if (e.message === 'loggedOut' || e.message === 'encode-failed') {
           await kv.set(RESULT_KEY, JSON.stringify({ id: attemptId, number: digits, status: 'error', error: 'WhatsApp logged the session out. Request a new code.', at: Date.now() })).catch(() => {});
         } else {
